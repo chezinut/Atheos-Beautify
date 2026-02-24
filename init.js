@@ -9,14 +9,13 @@
 // Source: https://github.com/Andr3as/Codiad-Beautify
 //////////////////////////////////////////////////////////////////////80////////////////////80
 
-
 (function(global) {
 	'use strict';
 
 	const self = {
 
-		path: atheos.path + 'plugins/Beautify/',
-		
+		path: atheos.baseUrl + 'plugins/Beautify/',
+
 		beautifyPhp: null,
 
 		autoBeautifyExtensions: {
@@ -31,9 +30,7 @@
 		cleanWhitespace: true,
 
 		settings: {
-			indent_size: 1,
-			indent_char: "\t",
-			indent_level: 0,
+			indent_size: 1,			indent_char: "\t",indent_level: 0,
 			indent_with_tabs: false,
 			preserve_newlines: true,
 			max_preserve_newlines: 10,
@@ -62,20 +59,10 @@
 				self.beautifyPhp = ace.require("ace/ext/beautify");
 			});
 
-			//Set subscriptions
-			carbon.subscribe('active.focus', function(path) {
-				if (atheos.editor.getActive() === null) return;
-				var manager = atheos.editor.getActive().commands;
-				manager.addCommand({
-					name: "Beautify",
-					bindKey: {
-						win: "Ctrl-Alt-B",
-						mac: "Command-Alt-B"
-					},
-					exec: function() {
-						self.beautify();
-					}
-				});
+			// Set keybindings
+			atheos.keybind.add('beautify', {
+				fn: self.beautify,
+				default: 'Ctrl-Alt-B',
 			});
 
 			carbon.subscribe('active.save', self.autoBeautify);
@@ -121,7 +108,7 @@
 			} else if (self.cleanWhitespace) {
 				return content.replace(/[ \t]+$/gm, '');
 			} else {
-			    return false;
+				return false;
 			}
 		},
 
@@ -130,26 +117,30 @@
 		//////////////////////////////////////////////////////////////////////80
 		beautify: function(path) {
 			var localSettings = self.settings;
-			path = path || atheos.active.getPath();
+			path = path || atheos.inFocusPath;
 
-			var session = atheos.active.getSession(path);
-			var selection = session.selection;
+			var aceSession = atheos.editor.getAceSession(path);
+			var aceEditor = atheos.editor.getAceEditor(path);
 
-			var activePath = atheos.active.getPath();
+			var selection = aceEditor.selection;
+
+			var activePath = atheos.inFocusPath;
 			var ext = pathinfo(path).extension;
 
+
 			let oldCursor = (path === activePath) ? extend(selection.cursor) : false;
-			let oldIndex = (path === activePath) ? session.getDocument().positionToIndex(oldCursor) : false;
-			
+			let oldIndex = (path === activePath) ? aceSession.getDocument().positionToIndex(oldCursor) : false;
+
 			if (selection.rangeCount == 0) {
+				log('selection');
 				selection.selectAll();
 			} else {
 				localSettings.indent_level = "keep";
 			}
 
-// 			var selectionRange = selection.getAllRanges();
+			// 			var selectionRange = selection.getAllRanges();
 			var selectedRange = selection.getRange();
-			var oldContent = session.getTextRange(selectedRange);
+			var oldContent = aceSession.getTextRange(selectedRange);
 
 			// Temporarily disabling multi-selection beaufication due to range changes.
 			// for (var i = 0; i < selectionRanges.length; i++) {
@@ -157,19 +148,19 @@
 
 			var newContent = self.beautifyContent(ext, oldContent);
 			if (typeof(newContent) !== 'string' || oldContent === newContent) return false;
-			session.replace(selectedRange, newContent);
+			aceSession.replace(selectedRange, newContent);
 			selection.clearSelection();
 
 			if (path === activePath) {
 				// Save the old cursor position to the undoStack
-				const undoStack = session.getUndoManager().$undoStack;
+				const undoStack = aceSession.getUndoManager().$undoStack;
 				undoStack[undoStack.length - 1].cursor = oldCursor;
 
 				if (self.guessCursorPosition) {
 					//  Guess the cursor position after beautifying content
 					let newIndex = self.findCursorIndex(oldContent, newContent, oldIndex);
-					let newCursor = session.getDocument().indexToPosition(newIndex);
-				// 	log(`Guessing cursor moved to ${newIndex} from ${oldIndex}`);
+					let newCursor = aceSession.getDocument().indexToPosition(newIndex);
+					// 	log(`Guessing cursor moved to ${newIndex} from ${oldIndex}`);
 					selection.moveCursorToPosition(newCursor);
 				}
 			}
@@ -181,7 +172,7 @@
 		autoBeautify: function(path) {
 			if (!self.autoBeautifyEnabled) return;
 
-			path = path || atheos.active.getPath();
+			path = path || atheos.inFocusPath;
 			var ext = pathinfo(path).extension;
 			ext = 'htm' ? 'html' : ext;
 			ext = 'scss' ? 'css' : ext;
@@ -253,10 +244,10 @@
 				const result = originalUndo.apply(this, args);
 
 				if (entry && entry.cursor && atheos && atheos.editor) {
-					const editor = atheos.editor.getActive();
-					if (editor) {
-						editor.clearSelection();
-						editor.moveCursorToPosition(entry.cursor);
+					const aceEditor = atheos.inFocusEditor;
+					if (aceEditor) {
+						aceEditor.clearSelection();
+						aceEditor.moveCursorToPosition(entry.cursor);
 					}
 				}
 
